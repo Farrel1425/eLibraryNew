@@ -11,9 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('anggotas', function (Blueprint $table) {
+        Schema::create('anggota', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->unsignedBigInteger('id_user')->unique()->index();
+            $table->string('nis')->unique();
+            $table->string('nama_anggota');
+            $table->string('no_hp');
+            $table->text('alamat');
+            $table->enum('jenis_kelamin', ['Laki-laki', 'Perempuan']);
+            $table->enum('status_anggota', ['Aktif', 'Non-Aktif'])->default('Aktif');
+            $table->timestamps(); 
+
+             // Foreign key
+            $table->foreign('id_user')->references('id')->on('users')->onDelete('cascade');
         });
     }
 

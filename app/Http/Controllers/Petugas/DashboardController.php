@@ -1,18 +1,18 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Petugas;
 
-use App\Models\Anggota;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
-class AnggotaController extends Controller
+class DashboardController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        //
+         return view('petugas.dashboard');
     }
 
     /**
@@ -34,7 +34,7 @@ class AnggotaController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Anggota $anggota)
+    public function show(string $id)
     {
         //
     }
@@ -42,7 +42,7 @@ class AnggotaController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Anggota $anggota)
+    public function edit(string $id)
     {
         //
     }
@@ -50,7 +50,7 @@ class AnggotaController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Anggota $anggota)
+    public function update(Request $request, string $id)
     {
         //
     }
@@ -58,7 +58,7 @@ class AnggotaController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Anggota $anggota)
+    public function destroy(string $id)
     {
         //
     }
