@@ -108,4 +108,17 @@ class BukuController extends Controller
             $kategori->save();
         }
     }
+
+    public function search(Request $request)
+    {
+        $search = $request->get('q');
+
+        $bukus = Buku::where('judul', 'like', "%{$search}%")
+                    ->select('id', 'judul')
+                    ->limit(20)
+                    ->get();
+
+        return response()->json($bukus);
+    }
+
 }

@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Anggota;
 use App\Models\Buku;
 use App\Models\Denda;
-use App\Models\Anggota;
+use App\Models\PeminjamanDetail;
 use App\Models\Petugas;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Peminjaman extends Model
 {
@@ -31,8 +34,27 @@ class Peminjaman extends Model
         'tanggal_harus_kembali' => 'datetime'
     ];
 
+
+
+    public function getDendaAttribute()
+    {
+        // Hitung hanya jika status masih 'dipinjam' dan tanggal harus kembali sudah lewat
+        if ($this->status === 'dipinjam' && $this->tanggal_harus_kembali) {
+            $hariIni = Carbon::today();
+            $tanggalHarusKembali = Carbon::parse($this->tanggal_harus_kembali);
+
+            if ($tanggalHarusKembali->lessThan($hariIni)) {
+                $jumlahHariTerlambat = $tanggalHarusKembali->diffInDays($hariIni);
+                return $jumlahHariTerlambat * 1000; // tarif denda per hari
+            }
+        }
+
+        return 0;
+    }
+
+
     /* ==================== RELASI ==================== */
-    
+
     /**
      * Relasi ke Anggota
      */
@@ -41,13 +63,6 @@ class Peminjaman extends Model
         return $this->belongsTo(Anggota::class, 'id_anggota');
     }
 
-    /**
-     * Relasi ke Buku
-     */
-    public function buku(): BelongsTo
-    {
-        return $this->belongsTo(Buku::class, 'id_buku');
-    }
 
     /**
      * Relasi ke Petugas
@@ -64,6 +79,13 @@ class Peminjaman extends Model
     {
         return $this->hasOne(Denda::class, 'id_peminjaman');
     }
+    /**
+     * Relasi ke PeminjamanDetail (One-to-Many)
+     */
+    public function details(): HasMany
+    {
+        return $this->hasMany(PeminjamanDetail::class, 'id_peminjaman');
+    }
 
     /* ==================== METHOD CUSTOM ==================== */
 
@@ -72,7 +94,7 @@ class Peminjaman extends Model
      */
     public function isTerlambat(): bool
     {
-        return now()->gt($this->tanggal_harus_kembali) && 
+        return now()->gt($this->tanggal_harus_kembali) &&
                $this->status === 'Dipinjam';
     }
 
@@ -81,8 +103,8 @@ class Peminjaman extends Model
      */
     public function hariKeterlambatan(): int
     {
-        return $this->isTerlambat() 
-            ? now()->diffInDays($this->tanggal_harus_kembali) 
+        return $this->isTerlambat()
+            ? now()->diffInDays($this->tanggal_harus_kembali)
             : 0;
     }
 
@@ -102,4 +124,22 @@ class Peminjaman extends Model
         return $query->whereHas('anggota', fn($q) => $q->where('nama_anggota', 'like', "%$keyword%"))
                    ->orWhereHas('buku', fn($q) => $q->where('judul', 'like', "%$keyword%"));
     }
+
+    public function getFormattedTanggalPinjamAttribute()
+    {
+        return optional($this->tanggal_pinjam)->format('d-m-Y');
+    }
+
+    public function getFormattedTanggalKembaliAttribute()
+    {
+        return optional($this->tanggal_kembali)->format('d-m-Y');
+    }
+
+    public function getFormattedDendaAttribute()
+    {
+        return $this->denda > 0
+            ? 'Rp ' . number_format($this->denda, 0, ',', '.')
+            : null;
+    }
+
 }

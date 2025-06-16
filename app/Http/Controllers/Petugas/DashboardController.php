@@ -12,7 +12,10 @@ class DashboardController extends Controller
      */
     public function index()
     {
-         return view('petugas.dashboard');
+        $totalBuku = \App\Models\Buku::count();
+        $totalAnggota = \App\Models\Anggota::count();
+        $totalPeminjaman = \App\Models\Peminjaman::count();
+         return view('petugas.dashboard', compact('totalBuku', 'totalAnggota', 'totalPeminjaman'));
     }
 
     /**

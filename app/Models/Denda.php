@@ -10,19 +10,19 @@ class Denda extends Model
 {
     use HasFactory;
 
-    /**
-     * Kolom yang TIDAK bisa diisi massal
-     * 
-     */
     protected $table = 'denda';
-    protected $guarded = ['id']; // Hanya proteksi ID
 
     /**
-     * Casting tipe data
+     * Kolom yang tidak bisa diisi massal
+     */
+    protected $guarded = ['id'];
+
+    /**
+     * Casts tipe data otomatis
      */
     protected $casts = [
         'tanggal_pembayaran' => 'datetime',
-        'jumlah' => 'decimal:2'
+        'jumlah' => 'float', // gunakan float agar tetap presisi meskipun tidak tampil 2 angka
     ];
 
     /**
@@ -42,28 +42,28 @@ class Denda extends Model
     }
 
     /**
-     * Accessor untuk status label
+     * Accessor untuk badge status_denda
      */
     public function getStatusLabelAttribute(): string
     {
-        return match($this->status_denda) {
+        return match ($this->status_denda) {
             'Lunas' => '<span class="badge bg-success">Lunas</span>',
-            'Belum Lunas' => '<span class="badge bg-warning">Belum Lunas</span>',
-            'Dibebaskan' => '<span class="badge bg-info">Dibebaskan</span>',
-            default => '<span class="badge bg-secondary">-</span>'
+            'Belum Lunas' => '<span class="badge bg-warning text-dark">Belum Lunas</span>',
+            'Dibebaskan' => '<span class="badge bg-info text-dark">Dibebaskan</span>',
+            default => '<span class="badge bg-secondary">-</span>',
         };
     }
 
     /**
-     * Hitung denda per hari (contoh: Rp5.000/hari)
+     * Hitung jumlah denda berdasarkan hari keterlambatan
      */
     public static function hitungDenda(int $hari_keterlambatan): float
     {
-        return $hari_keterlambatan * 5000;
+        return $hari_keterlambatan * 5000; // bisa ubah ke config jika ingin dinamis
     }
 
     /**
-     * Scope untuk denda belum lunas
+     * Scope denda yang belum lunas
      */
     public function scopeBelumLunas($query)
     {
@@ -71,13 +71,12 @@ class Denda extends Model
     }
 
     /**
-     * Scope untuk denda belum dibayar dan sudah lebih dari 7 hari
+     * Scope denda yang belum dibayar dan sudah lebih dari 7 hari
      */
     public function scopeTerlambatBayar($query)
     {
         return $query
             ->where('status_denda', 'Belum Lunas')
-            ->whereDate('created_at', '<', now()->subDays(7));
+            ->where('created_at', '<', now()->subDays(7));
     }
 }
-

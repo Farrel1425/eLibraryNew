@@ -33,7 +33,7 @@ class Buku extends Model
     /**
      * Relasi ke Peminjaman
      */
-    public function peminjaman(): HasMany
+    public function peminjaman_detail(): HasMany
     {
         return $this->hasMany(Peminjaman::class, 'id_buku');
     }

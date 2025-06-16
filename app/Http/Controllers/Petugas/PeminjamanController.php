@@ -2,78 +2,173 @@
 
 namespace App\Http\Controllers\Petugas;
 
-use App\Models\Buku;
-use App\Models\Anggota;
-use App\Models\Petugas;
+use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\Controller;
 use App\Models\Peminjaman;
+use App\Models\PeminjamanDetail;
+use App\Models\Anggota;
+use App\Models\Buku;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Auth;
 
 class PeminjamanController extends Controller
 {
-   public function index()
+    // Menampilkan daftar semua peminjaman
+    public function index()
     {
-        $peminjamans = Peminjaman::with(['anggota', 'buku', 'petugas', 'denda'])->latest()->get();
+        $peminjamans = Peminjaman::all();
         return view('petugas.peminjaman.index', compact('peminjamans'));
     }
 
+    // Menampilkan form untuk membuat peminjaman baru
     public function create()
     {
+        // Ambil semua anggota dan buku yang stoknya masih tersedia
         $anggotas = Anggota::all();
-        $bukus = Buku::all();
-        $petugas = Petugas::all();
-        return view('petugas.peminjaman.create', compact('anggotas', 'bukus', 'petugas'));
+        $bukus = Buku::where('stok', '>', 0)->get();
+        return view('petugas.peminjaman.create', compact('anggotas', 'bukus'));
+
     }
 
-   public function store(Request $request)
+
+    // Menyimpan data peminjaman baru ke database
+    public function store(Request $request)
     {
-        // 1. Validasi hanya input dari form
-        $validated = $request->validate([
+        $request->validate([
             'id_anggota' => 'required|exists:anggota,id',
-            'id_buku' => 'required|exists:buku,id',
-            'tanggal_pinjam' => 'required|date',
-        ]);
-
-        // 2. Tambahkan nilai tambahan yang tidak dari form
-        $validated['id_petugas'] = Auth::user()->petugas->id ?? null;
-        $validated['tanggal_harus_kembali'] = Carbon::parse($validated['tanggal_pinjam'])->addDays(7);
-        $validated['status'] = 'Dipinjam'; // Default langsung
-
-        // 3. Simpan data peminjaman
-        Peminjaman::create($validated);
-
-        return redirect()->route('petugas.peminjaman.index')->with('success', 'Peminjaman berhasil ditambahkan.');
-    }
-
-    public function edit(Peminjaman $peminjaman)
-    {
-        $anggota = Anggota::all();
-        $buku = Buku::all();
-        $petugas = Petugas::all();
-        return view('peminjaman.edit', compact('peminjaman', 'anggota', 'buku', 'petugas'));
-    }
-
-    public function update(Request $request, Peminjaman $peminjaman)
-    {
-        $validated = $request->validate([
-            'id_anggota' => 'required',
-            'id_buku' => 'required',
-            'id_petugas' => 'required',
+            'id_buku' => 'required|array|min:1',
+            'id_buku.*' => 'exists:buku,id',
             'tanggal_pinjam' => 'required|date',
             'tanggal_harus_kembali' => 'required|date|after_or_equal:tanggal_pinjam',
-            'tanggal_kembali' => 'nullable|date',
-            'status' => 'required|in:Dipinjam,Dikembalikan'
         ]);
 
-        $peminjaman->update($validated);
-        return redirect()->route('peminjaman.index')->with('success', 'Peminjaman berhasil diupdate.');
+        $petugas = Auth::user()->petugas;
+        if (!$petugas) return back()->withErrors('Akun login tidak memiliki data petugas.');
+
+        // Simpan header peminjaman
+        $peminjaman = Peminjaman::create([
+            'id_anggota' => $request->id_anggota,
+            'id_petugas' => $petugas->id,
+            'tanggal_pinjam' => $request->tanggal_pinjam,
+            'tanggal_harus_kembali' => $request->tanggal_harus_kembali,
+            'status' => 'Dipinjam',
+        ]);
+
+        // Simpan detail peminjaman (bisa banyak buku)
+        foreach ($request->id_buku as $id_buku) {
+            $buku = Buku::findOrFail($id_buku);
+            if ($buku->stok <= 0) return back()->withErrors("Stok buku '{$buku->judul}' habis.");
+
+            // Kurangi stok buku
+            $buku->decrement('stok');
+
+            // Simpan detail
+            PeminjamanDetail::create([
+                'id_peminjaman' => $peminjaman->id,
+                'id_buku' => $id_buku,
+                'status' => 'Dipinjam',
+            ]);
+        }
+        return redirect()->route('petugas.peminjaman.index')->with('success', 'Peminjaman berhasil disimpan.');
     }
 
+    // Menampilkan detail satu peminjaman
+    public function show(Peminjaman $peminjaman)
+    {
+        $peminjaman->load(['anggota', 'petugas', 'details.buku']);
+        return view('petugas.peminjaman.show', compact('peminjaman'));
+    }
+
+    // Menampilkan form edit untuk peminjaman
+    public function edit(Peminjaman $peminjaman)
+    {
+        // Ambil semua anggota dan buku
+        $anggotas = Anggota::all();
+        $bukus = Buku::all();
+
+        return view('petugas.peminjaman.edit', compact('peminjaman', 'anggotas', 'bukus'));
+    }
+
+    // Memperbarui data peminjaman yang sudah ada
+    public function update(Request $request, Peminjaman $peminjaman)
+    {
+        $request->validate([
+            'id_anggota' => 'required|exists:anggota,id',
+            'id_buku' => 'required|array|min:1',
+            'id_buku.*' => 'exists:buku,id',
+            'tanggal_pinjam' => 'required|date',
+            'tanggal_harus_kembali' => 'required|date|after_or_equal:tanggal_pinjam',
+        ]);
+
+        // Kembalikan stok buku-buku lama
+        foreach ($peminjaman->details as $detail) {
+            $detail->buku->increment('stok');
+            $detail->delete();
+        }
+
+        // Update header
+        $peminjaman->update([
+            'id_anggota' => $request->id_anggota,
+            'tanggal_pinjam' => $request->tanggal_pinjam,
+            'tanggal_harus_kembali' => $request->tanggal_harus_kembali,
+        ]);
+
+        // Simpan detail baru
+        foreach ($request->id_buku as $id_buku) {
+            $buku = Buku::findOrFail($id_buku);
+            if ($buku->stok <= 0) return back()->withErrors("Stok buku '{$buku->judul}' habis.");
+            $buku->decrement('stok');
+
+            PeminjamanDetail::create([
+                'id_peminjaman' => $peminjaman->id,
+                'id_buku' => $id_buku,
+                'status' => 'Dipinjam',
+            ]);
+        }
+
+        return redirect()->route('petugas.peminjaman.index')->with('success', 'Data peminjaman berhasil diperbarui.');
+    }
+
+
+    // Menghapus peminjaman
     public function destroy(Peminjaman $peminjaman)
     {
+        // Kembalikan stok semua buku yang masih 'Dipinjam'
+        foreach ($peminjaman->details as $detail) {
+            if ($detail->status === 'Dipinjam') {
+                $detail->buku->increment('stok');
+            }
+            $detail->delete();
+        }
+
         $peminjaman->delete();
-        return back()->with('success', 'Peminjaman berhasil dihapus.');
+
+        return redirect()->route('petugas.peminjaman.index')->with('success', 'Data peminjaman berhasil dihapus.');
     }
+
+
+    // Fungsi untuk mengembalikan buku
+    public function kembalikan(Peminjaman $peminjaman)
+    {
+        if ($peminjaman->status === 'Dikembalikan') {
+            return back()->withErrors('Buku sudah dikembalikan sebelumnya.');
+        }
+
+        // Kembalikan semua buku & update detail
+        foreach ($peminjaman->details as $detail) {
+            if ($detail->status === 'Dipinjam') {
+                $detail->buku->increment('stok');
+                $detail->update(['status' => 'Dikembalikan']);
+            }
+        }
+
+        $peminjaman->update([
+            'status' => 'Dikembalikan',
+            'tanggal_kembali' => Carbon::now()->toDateString(),
+        ]);
+
+        return redirect()->route('petugas.peminjaman.index')->with('success', 'Buku berhasil dikembalikan.');
+    }
+
+
 }

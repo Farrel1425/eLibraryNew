@@ -14,6 +14,7 @@ class Kunjungan extends Model
      * Kolom yang TIDAK bisa diisi massal
      * Kosongkan array untuk mengizinkan semua field diisi
      */
+    protected $table = 'kunjungan'; 
     protected $guarded = [];
 
     /**

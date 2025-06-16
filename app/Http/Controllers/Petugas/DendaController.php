@@ -3,62 +3,38 @@
 namespace App\Http\Controllers\Petugas;
 
 use App\Models\Denda;
-use App\Models\Petugas;
-use App\Models\Peminjaman;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 
 class DendaController extends Controller
 {
-   public function index()
+    public function index()
     {
-        $denda = Denda::with(['peminjaman', 'petugas'])->latest()->get();
-        return view('denda.index', compact('denda'));
+        $dendas = Denda::with(['peminjaman.anggota', 'peminjaman.buku'])
+            ->latest()
+            ->get();
+
+        return view('petugas.denda.index', compact('dendas'));
     }
 
-    public function create()
+    public function show($id)
     {
-        $peminjaman = Peminjaman::with('anggota')->doesntHave('denda')->get(); // hanya yang belum punya denda
-        $petugas = Petugas::all();
-        return view('denda.create', compact('peminjaman', 'petugas'));
+        $denda = Denda::with(['peminjaman.anggota', 'peminjaman.buku'])->findOrFail($id);
+        return view('petugas.denda.show', compact('denda'));
     }
 
-    public function store(Request $request)
+    public function update(Request $request, $id)
     {
-        $validated = $request->validate([
-            'id_peminjaman' => 'required|exists:peminjaman,id',
-            'jumlah' => 'required|numeric|min:0',
-            'tanggal_pembayaran' => 'nullable|date',
-            'status_denda' => 'required|in:Lunas,Belum Lunas',
-            'id_petugas' => 'nullable|exists:petugas,id'
+        $denda = Denda::findOrFail($id);
+
+        if ($denda->status_denda === 'Lunas') {
+            return redirect()->back()->with('info', 'Denda sudah lunas.');
+        }
+
+        $denda->update([
+            'status_denda' => 'Lunas',
         ]);
 
-        Denda::create($validated);
-        return redirect()->route('denda.index')->with('success', 'Denda berhasil ditambahkan.');
-    }
-
-    public function edit(Denda $denda)
-    {
-        $petugas = Petugas::all();
-        return view('denda.edit', compact('denda', 'petugas'));
-    }
-
-    public function update(Request $request, Denda $denda)
-    {
-        $validated = $request->validate([
-            'jumlah' => 'required|numeric|min:0',
-            'tanggal_pembayaran' => 'nullable|date',
-            'status_denda' => 'required|in:Lunas,Belum Lunas',
-            'id_petugas' => 'nullable|exists:petugas,id'
-        ]);
-
-        $denda->update($validated);
-        return redirect()->route('denda.index')->with('success', 'Denda berhasil diupdate.');
-    }
-
-    public function destroy(Denda $denda)
-    {
-        $denda->delete();
-        return back()->with('success', 'Denda berhasil dihapus.');
+        return redirect()->route('petugas.denda.index')->with('success', 'Denda berhasil dilunasi.');
     }
 }

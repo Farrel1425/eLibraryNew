@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('alamat');
             $table->enum('jenis_kelamin', ['Laki-laki', 'Perempuan']);
             $table->enum('status_anggota', ['Aktif', 'Non-Aktif'])->default('Aktif');
-            $table->timestamps(); 
+            $table->timestamps();
 
              // Foreign key
             $table->foreign('id_user')->references('id')->on('users')->onDelete('cascade');
@@ -32,6 +32,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('anggotas');
+        Schema::dropIfExists('anggota');
     }
 };

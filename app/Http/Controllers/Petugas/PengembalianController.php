@@ -2,100 +2,112 @@
 
 namespace App\Http\Controllers\Petugas;
 
-use App\Models\Peminjaman;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Peminjaman;
+use App\Models\Pengembalian;
+use App\Models\Denda;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class PengembalianController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+    // Menampilkan semua data pengembalian
     public function index()
     {
-        $peminjamans = Peminjaman::with(['anggota', 'buku', 'petugas', 'denda'])->latest()->get();
-        return view('petugas.pengembalian.index', compact('peminjamans'));
+        $pengembalians = Pengembalian::with(['peminjaman', 'peminjaman.anggota', 'peminjaman.buku', 'peminjaman.petugas'])->latest()->get();
+        return view('petugas.pengembalian.index', compact('pengembalians'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    // Menampilkan form pengembalian berdasarkan peminjaman tertentu
+    public function create(Peminjaman $peminjaman)
     {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        $request->validate([
-            'peminjaman_id' => 'required|exists:peminjaman,id',
-           
-        ]);
-
-        $tanggal_kembali = now();
-
-        $peminjaman = Peminjaman::findOrFail($request->peminjaman_id);
-       
-        $peminjaman->update([
-            'tanggal_kembali' => $tanggal_kembali,
-            'status' => 'dikembalikan',
-        ]);
-        // dd($peminjaman);
-        // calculate denda if the return date is past the due date
-        $denda = 0;
-        // dd($denda);
-        if ($tanggal_kembali > $peminjaman->tanggal_harus_kembali) {
-            // dd($peminjaman->tanggal_harus_kembali);
-            $selisih_hari = $tanggal_kembali->diffInDays($peminjaman->tanggal_harus_kembali);
-        //    make $selisih hari as integer
-            $selisih_hari = (int) $selisih_hari;
-            // dd($selisih_hari);
-            $denda = $selisih_hari * -2000; // Assuming denda is 1000 per day
+        // Cek jika sudah dikembalikan, maka tidak bisa input lagi
+        if ($peminjaman->status === 'Dikembalikan') {
+            return redirect()->route('petugas.peminjaman.index')->withErrors('Buku sudah dikembalikan sebelumnya.');
         }
-       
-        $peminjaman->denda()->updateOrCreate(
-            ['id_peminjaman' => $peminjaman->id],
-            ['jumlah' => $denda],
-            ['status_denda' => "Belum Lunas"],
-            ['id_petugas' => Auth::user()->petugas->id ?? null]
-        );
 
-        return redirect()->route('petugas.pengembalian.index')->with('success', 'Pengembalian berhasil dicatat.');
+        return view('petugas.pengembalian.create', compact('peminjaman'));
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
+    // Simpan data pengembalian
+    public function store(Request $request, Peminjaman $peminjaman)
     {
-        //
+        // Validasi input
+        $request->validate([
+            'tanggal_kembali' => 'required|date|after_or_equal:' . $peminjaman->tanggal_pinjam,
+        ]);
+
+        // Hitung denda jika terlambat
+        $tanggalKembali = Carbon::parse($request->tanggal_kembali);
+        $tanggalHarusKembali = Carbon::parse($peminjaman->tanggal_harus_kembali);
+
+        $terlambat = $tanggalKembali->greaterThan($tanggalHarusKembali);
+        $jumlahHariTerlambat = $terlambat ? $tanggalKembali->diffInDays($tanggalHarusKembali) : 0;
+        $jumlahDenda = $jumlahHariTerlambat * 1000; // misalnya 1000 per hari
+
+        // Ambil data petugas yang sedang login
+        $petugas = Auth::user()->petugas;
+
+        if (!$petugas) {
+            return back()->withErrors('Akun login tidak memiliki data petugas.');
+        }
+
+        // Simpan data pengembalian
+        $pengembalian = Pengembalian::create([
+            'id_peminjaman' => $peminjaman->id,
+            'tanggal_kembali' => $request->tanggal_kembali,
+            'id_petugas' => $petugas->id,
+        ]);
+
+        // Update status peminjaman menjadi "Dikembalikan"
+        $peminjaman->update(['status' => 'Dikembalikan']);
+
+        // Kembalikan stok buku
+        if ($peminjaman->buku) {
+            $peminjaman->buku->increment('stok');
+        }
+
+        // Jika ada denda, simpan juga ke tabel denda
+        if ($jumlahHariTerlambat > 0) {
+            Denda::create([
+                'id_pengembalian' => $pengembalian->id,
+                'jumlah' => $jumlahDenda,
+                'status' => 'Belum Dibayar',
+            ]);
+        }
+
+        return redirect()->route('petugas.peminjaman.index')->with('success', 'Pengembalian berhasil dicatat.');
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
+    // Menampilkan detail pengembalian tertentu
+    public function show(Pengembalian $pengembalian)
     {
-        //
+        $pengembalian->load(['peminjaman', 'peminjaman.anggota', 'peminjaman.buku', 'denda']);
+        return view('petugas.pengembalian.show', compact('pengembalian'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
+    // Opsi hapus pengembalian jika dibutuhkan (jarang digunakan, hati-hati)
+    public function destroy(Pengembalian $pengembalian)
     {
-        //
-    }
+        // Kembalikan status peminjaman jika pengembalian dihapus
+        $peminjaman = $pengembalian->peminjaman;
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        // Update status menjadi 'Dipinjam' kembali
+        $peminjaman->update(['status' => 'Dipinjam']);
+
+        // Kurangi stok karena dianggap belum dikembalikan
+        if ($peminjaman->buku) {
+            $peminjaman->buku->decrement('stok');
+        }
+
+        // Hapus denda jika ada
+        if ($pengembalian->denda) {
+            $pengembalian->denda->delete();
+        }
+
+        $pengembalian->delete();
+
+        return redirect()->route('petugas.pengembalian.index')->with('success', 'Data pengembalian berhasil dihapus.');
     }
 }

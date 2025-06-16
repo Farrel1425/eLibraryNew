@@ -22,7 +22,7 @@ return new class extends Migration
 
             // Foreign keys
             $table->foreign('id_peminjaman')->references('id')->on('peminjaman')->onDelete('cascade');
-                  
+
             $table->foreign('id_petugas')->references('id')->on('petugas')->onDelete('set null');
         });
     }
@@ -32,6 +32,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('dendas');
+        Schema::dropIfExists('denda');
     }
 };

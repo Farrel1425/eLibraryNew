@@ -11,14 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('kunjungan', function (Blueprint $table) {
+         Schema::create('kategori', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('id_anggota');
-            $table->dateTime('waktu_kunjungan');
+            $table->string('nama_kategori'); // Contoh: Fiksi, Sains, Sejarah
+            $table->text('deskripsi')->nullable();
+            $table->integer('jumlah_buku')->default(0); // Jumlah buku dalam kategori, default 1
             $table->timestamps();
-
-            // Foreign key constraint
-            $table->foreign('id_anggota')->references('id')->on('anggota')->onDelete('cascade');
         });
     }
 
@@ -27,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('kunjungans');
+        Schema::dropIfExists('kategori_buku');
     }
 };
